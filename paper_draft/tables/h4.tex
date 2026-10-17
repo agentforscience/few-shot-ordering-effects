@@ -1,0 +1,31 @@
+\begin{table}[t]
+\centering
+\caption{H4: order sensitivity at $K\geq4$ (8 orders per demonstration set; 6 for \samsum). ``Mean range'' averages best--worst over demonstration sets; ``max range'' is the worst single set. Units are accuracy points (\rougel points for \samsum). Lowest (least order-sensitive) per row in \textbf{bold}. Only the worst \mnli sets for 0.5B and 1.5B exceed 15 points.}
+\label{tab:h4}
+\small
+\begin{tabular}{@{}llccccc@{}}
+\toprule
+Task & Statistic & 0.5B & 1.5B & 3B & 7B & 14B \\
+\midrule
+\multirow{4}{*}{\mnli} & mean range & 13.3 & 11.1 & 7.8 & \textbf{5.9} & 8.1 \\
+ & max range & 21.7 & 17.5 & 11.7 & \textbf{9.8} & 11.7 \\
+ & SD & 4.7 & 4.0 & 2.7 & \textbf{2.1} & 2.8 \\
+ & \pgap & 5.5 & 4.5 & 3.1 & \textbf{2.4} & 3.2 \\
+\midrule
+\multirow{4}{*}{\rte} & mean range & 6.8 & 5.0 & 2.9 & 2.7 & \textbf{2.3} \\
+ & max range & 12.5 & 8.5 & 5.2 & 5.2 & \textbf{4.0} \\
+ & SD & 2.4 & 1.7 & 1.0 & 0.9 & \textbf{0.8} \\
+ & \pgap & 2.8 & 2.0 & 1.1 & 1.1 & \textbf{0.9} \\
+\midrule
+\multirow{4}{*}{\sst} & mean range & 4.8 & 2.8 & 2.2 & 1.2 & \textbf{1.0} \\
+ & max range & 15.5 & 6.7 & 6.0 & 2.0 & \textbf{1.5} \\
+ & SD & 1.8 & 1.0 & 0.8 & \textbf{0.4} & \textbf{0.4} \\
+ & \pgap & 2.0 & 1.1 & 0.9 & 0.5 & \textbf{0.4} \\
+\midrule
+\multirow{4}{*}{\samsum} & mean range & \textbf{2.0} & 2.1 & 3.2 & 2.7 & 6.5 \\
+ & max range & \textbf{3.1} & 4.2 & 5.3 & 3.3 & 10.9 \\
+ & SD & \textbf{0.8} & \textbf{0.8} & 1.2 & 1.1 & 2.4 \\
+ & \pgap & 1.0 & \textbf{0.9} & 1.5 & 1.3 & 2.8 \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,18 @@
+\begin{table}[t]
+\centering
+\caption{Are order effects systematic? Split-half Spearman $\rho$ of per-order scores across two random halves of the test items, and ratio of the observed best--worst range to a null range in which order labels are shuffled within each test item ($K\geq3$). Values with ratio $\geq1.5$ (order effects clearly above item-level noise) in \textbf{bold}.}
+\label{tab:reliability}
+\small
+\begin{tabular}{@{}lccccccccccc@{}}
+\toprule
+ & \multicolumn{5}{c}{Split-half $\rho$} & & \multicolumn{5}{c}{Observed / null range} \\
+\cmidrule(lr){2-6} \cmidrule(lr){8-12}
+Task & 0.5B & 1.5B & 3B & 7B & 14B & & 0.5B & 1.5B & 3B & 7B & 14B \\
+\midrule
+\mnli & 0.56 & 0.72 & 0.53 & 0.47 & 0.58 & & \textbf{2.08} & \textbf{2.83} & \textbf{1.83} & \textbf{1.70} & \textbf{2.07} \\
+\rte & 0.45 & 0.47 & 0.18 & 0.10 & 0.23 & & \textbf{1.79} & \textbf{1.60} & 1.22 & 1.11 & 1.23 \\
+\sst & 0.38 & 0.30 & $-$0.04 & $-$0.07 & 0.07 & & \textbf{1.64} & 1.41 & 1.00 & 0.89 & 0.98 \\
+\samsum & 0.26 & 0.22 & 0.47 & 0.38 & 0.67 & & 1.22 & 1.39 & \textbf{1.80} & \textbf{1.54} & \textbf{2.67} \\
+\bottomrule
+\end{tabular}
+\end{table}

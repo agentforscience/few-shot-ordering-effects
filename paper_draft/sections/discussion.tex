@@ -1,0 +1,41 @@
+\section{Discussion}
+\label{sec:discussion}
+
+\para{What survives from the hypothesis.}
+Three parts hold: NLI is more order-sensitive than sentiment for every model; larger models are usually less order-sensitive on classification; and order variance is flat at higher $K$.
+Three parts do not.
+The 4-shot threshold disappears once sensitivity is measured with a metric that does not grow with the number of sampled orders; the plateau is reached at $K=2$.
+The 15/5-point thresholds fail on average.
+And the recency (classification) \vsx primacy (generation) split is reversed in places: recency appears where it was not predicted (summarization with small models) and fails where it was predicted (NLI with mid-size models).
+
+\para{Relation to prior work.}
+The recency bias that \citet{zhao2021calibrate} documented in GPT-3 base models appears here only in the smallest instruction-tuned models on \sst; instruction tuning and scale may remove it, although our design cannot separate the two.
+\citet{lu2022fantastically} reported that order sensitivity does not vanish with scale.
+We find a more mixed picture within one family: it shrinks substantially on easy tasks, persists on \mnli, and grows for summarization at 14B.
+The anti-recency effect on NLI is, to our knowledge, not described in prior work and deserves a targeted study.
+
+\para{Practical implications.}
+{\bf When is order worth tuning?}
+Our reliability analysis gives a direct answer.
+For capable models ($\geq$3B) on easy tasks such as \sst, order-induced differences are about 1 point and are no larger than item-level noise, so tuning order on a dev set would overfit.
+Where order effects are systematic (\mnli at every size, and summarization at $\geq$3B), averaging over orders or searching for an order is justified.
+We also recommend that papers report a pairwise or variance-based sensitivity measure, rather than the best--worst range, when comparing across shot counts or across setups with different numbers of sampled orders, and that they check whether the ``best'' order is reproducible on held-out items.
+
+\para{Error analysis.}
+The 0.5B model's summaries usually run to the 80-token cap with repetitive text (median 67 words \vsx 24 for 14B), which explains its low and flat \rougel.
+The negative influence on NLI is concentrated in the final position (\figref{fig:labelflip}), which suggests a mechanism specific to the demonstration adjacent to the test item rather than a gradual decay.
+
+\subsection{Limitations}
+\label{sec:limitations}
+
+\begin{itemize}[leftmargin=*,itemsep=0pt,topsep=0pt]
+    \item {\bf One model family and one template per task.} We test only \qwen (released in 2024) with plain-text prompts and deterministic decoding. Other families, chat-formatted prompts or frontier API models may behave differently; no API models were available on our host.
+    \item {\bf Small test sets.} With 200 classification items and 80 dialogues, per-order accuracy carries roughly $\pm$3 points of item-level noise. \Secref{sec:reliability} quantifies this, but larger test sets would sharpen per-cell conclusions.
+    \item {\bf Limited orders and sets.} We cap orders at 8 per set, so best--worst ranges are lower bounds on the range over all $K!$ orders ($8!=40{,}320$). 7B and 14B use 10 demonstration sets per $K$ rather than 20, and the 14B probes use only $K=8$ (classification) and $K=6$ (\samsum).
+    \item {\bf Narrow generation probe.} The style-marker probe measures one kind of influence: copying a surface marker. We do not test primacy in content selection or in the ordering of facts, and \samsum is our only generation task.
+    \item {\bf Non-deterministic inference.} Batched bf16 inference accounts for about a third of the measured \samsum order variance for 0.5B, 1.5B and 7B. The 14B weights ($\approx$30\,GB) did not fit in the free memory of the shared GPUs ($\leq$23\,GB) during the noise-floor session, so the 14B summarization result lacks a noise-floor check.
+    \item {\bf Coarse size trends and contamination.} Size trends rest on 5 points. \sst, GLUE and \samsum are public and likely seen in pretraining, which affects absolute accuracy more than order effects.
+\end{itemize}
+
+\para{Broader impact.}
+This work concerns evaluation methodology. Its main risk is misuse in the opposite direction from our advice: selecting a favorable demonstration order to inflate reported few-shot results. Our reliability test is intended to make such selection visible.

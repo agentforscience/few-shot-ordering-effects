@@ -1,0 +1,19 @@
+\begin{table}[t]
+\centering
+\caption{H5: order sensitivity by model size ($K\geq2$). \pgap in points; flip rate is the percentage of test predictions that change between two orders. Spearman $\rho$ is over the 5 sizes. Lowest per row in \textbf{bold}.}
+\label{tab:size}
+\small
+\begin{tabular}{@{}llcccccc@{}}
+\toprule
+Task & Metric & 0.5B & 1.5B & 3B & 7B & 14B & $\rho$ [$p$] \\
+\midrule
+\sst & \pgap & 2.10 & 1.01 & 0.76 & 0.44 & \textbf{0.39} & $-$1.0 [$<$.001] \\
+ & flip rate (\%) & 4.6 & 1.9 & 2.3 & 0.9 & \textbf{0.6} & $-$0.9 [0.04] \\
+\rte & \pgap & 2.96 & 2.37 & 1.16 & 1.00 & \textbf{0.92} & $-$1.0 [$<$.001] \\
+ & flip rate (\%) & 9.1 & 5.9 & 2.8 & 3.0 & \textbf{1.9} & $-$0.9 [0.04] \\
+\mnli & \pgap & 5.14 & 4.27 & 2.92 & \textbf{2.37} & 3.60 & $-$0.7 [0.19] \\
+ & flip rate (\%) & 22.0 & 8.6 & 9.1 & \textbf{6.7} & 10.1 & $-$0.3 [0.62] \\
+\samsum & \pgap (\rougel) & \textbf{0.96} & 1.28 & 1.45 & 1.20 & 2.29 & $+$0.7 [0.19] \\
+\bottomrule
+\end{tabular}
+\end{table}

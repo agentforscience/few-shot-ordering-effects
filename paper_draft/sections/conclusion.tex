@@ -1,0 +1,11 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+We studied how the order of few-shot demonstrations affects in-context learning across shot counts, task types and model sizes, using one controlled protocol on five \qwen models.
+Demonstration order changes performance by about 1--13 points of mean best--worst range, depending strongly on task and model.
+Order variance is at its plateau already at two shots; the widely reported rise up to four shots comes from the number of orders sampled.
+Position influence is task- and size-dependent rather than a universal recency/primacy split: we see recency for small models on sentiment and on summarization, anti-recency for mid-size models on NLI, and roughly uniform influence for the largest models.
+Scale reduces order sensitivity on simple classification but not on \mnli or summarization.
+The key takeaway is that whether a ``best order'' exists is itself an empirical question: for strong models on easy tasks it is mostly noise, while on harder tasks it is systematic and worth handling.
+
+Future work should replicate these measurements on other model families and with chat templates; test whether NLI anti-recency comes from contrast with an inconsistent nearest demonstration, by flipping to correct \vsx incorrect labels; use larger test sets and full permutation enumeration for $K\leq5$ to estimate true worst cases; probe content-level primacy in generation; and test whether ensembling over orders recovers the systematic losses on \mnli.

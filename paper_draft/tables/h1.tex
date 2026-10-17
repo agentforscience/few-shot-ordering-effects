@@ -1,0 +1,16 @@
+\begin{table}[t]
+\centering
+\caption{H1: mean pairwise order gap (\pgap, points) by shot count, pooled over models, with Spearman correlations between $K$ and the gap for $K\leq4$ and $K\geq4$. $K=1$ has a single order and zero variance by construction. From $K=2$ the gap is essentially flat.}
+\label{tab:h1}
+\small
+\begin{tabular}{@{}lccccccc@{}}
+\toprule
+Task & $K$=2 & 3 & 4 & 6 & 8 & $\rho$ ($K\leq4$) [$p$] & $\rho$ ($K\geq4$) [$p$] \\
+\midrule
+\sst & 0.94 & 1.10 & 1.19 & 1.02 & 1.12 & 0.17 [0.007] & 0.03 [0.63] \\
+\rte & 2.03 & 2.09 & 1.60 & 1.82 & 1.79 & $-$0.02 [0.71] & 0.07 [0.26] \\
+\mnli & 3.88 & 3.34 & 3.81 & 4.12 & 3.99 & 0.16 [0.016] & $-$0.02 [0.78] \\
+\samsum (\rougel) & 1.36 & 1.42 & 1.47 & 1.49 & -- & 0.09 [0.40] & 0.07 [0.61] \\
+\bottomrule
+\end{tabular}
+\end{table}

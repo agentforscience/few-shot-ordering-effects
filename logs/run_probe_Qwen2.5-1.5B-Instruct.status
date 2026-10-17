@@ -1,0 +1,8 @@
+Fri Oct 16 01:00:41 PM CDT 2026 attempt 1 free=5971 launching Qwen/Qwen2.5-1.5B-Instruct
+Fri Oct 16 01:05:45 PM CDT 2026 failed: vllm.v1.engine.exceptions.EngineDeadError: EngineCore encountered an issue. See stack trace (above) for the root cause.
+Fri Oct 16 01:06:16 PM CDT 2026 attempt 2 free=5971 launching Qwen/Qwen2.5-1.5B-Instruct
+Fri Oct 16 01:11:10 PM CDT 2026 failed: vllm.v1.engine.exceptions.EngineDeadError: EngineCore encountered an issue. See stack trace (above) for the root cause.
+Fri Oct 16 01:11:40 PM CDT 2026 attempt 3 free=5971 launching Qwen/Qwen2.5-1.5B-Instruct
+Fri Oct 16 01:16:26 PM CDT 2026 failed: vllm.v1.engine.exceptions.EngineDeadError: EngineCore encountered an issue. See stack trace (above) for the root cause.
+Fri Oct 16 01:16:56 PM CDT 2026 attempt 4 free=5971 launching Qwen/Qwen2.5-1.5B-Instruct
+Fri Oct 16 01:28:15 PM CDT 2026 OK

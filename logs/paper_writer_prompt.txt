@@ -1,0 +1,809 @@
+You are an academic paper writer. Generate a complete NEURIPS style paper
+based on the experiment results provided.
+
+════════════════════════════════════════════════════════════════════════════════
+                         IMPORTANT: BEFORE YOU START
+════════════════════════════════════════════════════════════════════════════════
+
+Before writing any content, you MUST complete these steps:
+
+1. READ THE SKILL: Review the paper-writer skill at .claude/skills/paper-writer/SKILL.md
+2. READ THE STYLE GUIDE: Study templates/paper_writing/lab_style_guide.md carefully
+3. REVIEW EXAMPLES: Browse paper_examples/ for formatting and language patterns:
+   - Look at sections/1.introduction.tex for language style
+   - Look at tables/*.tex for table formatting
+   - Look at commands/*.tex for macro usage
+4. VERIFY COMMAND TEMPLATES: Command templates (math.tex, general.tex, macros.tex) are pre-copied to paper_draft/commands/
+
+CRITICAL: Reference example papers for FORMATTING and LANGUAGE STYLE only.
+Do NOT copy content, phrasing, or narrative structure from the example papers.
+The examples are in a different research domain - focus only on presentation style.
+
+════════════════════════════════════════════════════════════════════════════════
+                            EXPERIMENT REPORT
+════════════════════════════════════════════════════════════════════════════════
+
+# Few-Shot Example Ordering Effects on In-Context Learning — Research Report
+
+## 1. Executive Summary
+
+**Question.** How does the *order* of few-shot demonstrations affect in-context learning? We test this
+across shot counts (K = 1–8), task types (sentiment, NLI, summarization) and model sizes
+(Qwen2.5-Instruct 0.5B → 14B). We also ask which demo positions drive the model's output.
+
+**Answer.** Order matters, but most of the specific hypothesis is **not supported**:
+
+1. **Shot count.** Order variance does not rise up to 4-shot and then plateau. Measured without bias,
+   it is already at its plateau at K = 2 and stays flat to K = 8. The naive best–worst *range* does
+   show a "rise until 4-shot" shape, but that comes from the number of possible orders (2, 6, then
+   8 sampled), not from the model.
+2. **NLI vs sentiment gap.** The qualitative claim holds: NLI is more order-sensitive than sentiment.
+   The thresholds mostly fail. The mean best–worst gap over 8 orders (K ≥ 4) is 5.9–13.3 points on
+   MNLI and 2.3–6.8 on RTE (claim: >15), and 1.0–4.8 points on SST-2 (claim: <5). Individual
+   worst-case demo sets do reach 21.7 points on MNLI and 15.5 points on SST-2, for the 0.5B model.
+3. **Classification recency.** It is not a general rule. Causal label-flip probes find "last demo
+   ≈ 2–3× first" in only 2 of 15 model×task cells (SST-2 at 1.5B, RTE at 7B). On NLI, models of
+   1.5B–3B show the *opposite*: flipping the last demo's label moves predictions *away* from that
+   label. 7B/14B on SST-2 weight early demos more, and 14B on NLI is roughly position-uniform.
+4. **Generation primacy.** Refuted. For SAMSum summarization, a style marker has *more* influence
+   when it sits in a later demo (first/last influence ratio 0.64–0.80 for 0.5B–3B). At 7B and 14B
+   the effect is essentially position-independent (1.02–1.03 and 0.98).
+5. **Model size.** Larger models are less order-sensitive on SST-2 and RTE (monotone; Spearman
+   ρ = −1 over 5 sizes). The trend is non-monotone on MNLI (minimum at 7B). On SAMSum the trend
+   points the other way: 14B is the most order-sensitive model and its order effects are the most
+   reproducible. Caveat: identical-prompt reruns show that about a third of the SAMSum order variance is bf16
+   numerical noise for most sizes, and 14B could not be re-run (§4.4b). Classification order
+   effects are well above this noise floor.
+
+**Practical implication.** For capable models (≥3B) on easy tasks like SST-2, order-induced
+differences are about 1 point and are no larger than item-level noise. Choosing a "best order" there
+is overfitting. On harder tasks (MNLI, and summarization at 14B), order effects are systematic and
+reproducible across test items (split-half ρ ≈ 0.5–0.7). Order search or order-averaging can
+matter there.
+
+## 2. Research Question & Motivation
+
+The hypothesis under test had five parts:
+
+- **H1** Order variance increases with shot count up to 4-shot, then plateaus.
+- **H2** Classification shows recency: the last example is 2–3× more influential than the first.
+- **H3** Generation shows primacy.
+- **H4** The best-to-worst order gap exceeds 15 points (accuracy) on NLI and stays below 5 on sentiment.
+- **H5** Larger models are less order-sensitive.
+
+Few-shot prompting is the default way practitioners adapt LLMs, yet demo order is usually an
+uncontrolled variable. If order swings accuracy, few-shot results carry hidden variance, and
+practitioners need to know when order search, calibration or order-averaging is worth the effort.
+
+**Related work.** The resource-gathering stage was skipped for this workspace, so there was no
+`literature_review.md`. Lu et al. (2022, *Fantastically Ordered Prompts*) showed large order
+sensitivity for GPT-2/3 on classification, which did not shrink with scale. Zhao et al. (2021,
+*Calibrate Before Use*) documented majority-label and recency bias in GPT-3. Liu et al. (2023, *Lost
+in the Middle*) found U-shaped position effects in long contexts. Our contribution is a single
+controlled protocol on a modern instruction-tuned model family. It (a) separates order variance from
+the number of orders sampled, (b) measures per-position influence *causally* via interventions,
+(c) treats classification and generation the same way, and (d) checks whether "good orders"
+reproduce across test items.
+
+## 3. Experimental Setup
+
+**Models.** Qwen2.5-Instruct at 0.5B, 1.5B, 3B, 7B and 14B (bf16), run locally with vLLM 0.31
+(torch 2.13, CUDA 13) on one shared NVIDIA RTX A6000 (48 GB). No API keys were available on the
+host. One model family keeps size as the only systematic difference. The family is from 2024; frontier
+API models were not tested.
+
+**Decoding.** Deterministic throughout. For classification, the next token is restricted to the
+label tokens (`allowed_token_ids`, `logprobs_mode=processed_logprobs`), which gives a log-softmax
+over the label set; the prediction is the argmax. For generation: greedy decoding, max 80 new
+tokens, stop at newline. Because decoding is deterministic, **all variance across orders is caused
+by order**.
+
+**Prompts.** Plain-text completion format, no chat template. Example (RTE, K = 2):
+```
+Decide whether the premise entails the hypothesis. Answer yes or no.
+
+Premise: ...
+Hypothesis: ...
+Answer: no
+
+Premise: ...
+Hypothesis: ...
+Answer: yes
+
+Premise: <test>
+Hypothesis: <test>
+Answer:
+```
+The other templates are in `src/tasks.py`:
+- SST-2: `Review: … / Sentiment: positive|negative`.
+- MNLI: `yes|maybe|no`, with the header defining these as entailment/neutral/contradiction.
+- SAMSum: `Dialogue: … / Summary: …`, under the header "Summarize each dialogue in one or two sentences."
+
+**Data.**
+
+| Task | Type | Demo pool (train, length-filtered) | Test items |
+|---|---|---|---|
+| SST-2 | sentiment, 2-way | 41,584 | 200 (val, balanced) |
+| RTE | NLI, 2-way | 1,830 | 200 (val) |
+| MNLI-matched | NLI, 3-way | 327,814 | 201 (val, balanced) |
+| SAMSum | dialogue summarization | 7,640 | 80 (test) |
+
+**Design (shared by every model, seed 42).**
+- **Classification:** K ∈ {1, 2, 3, 4, 6, 8}. For each K, 10 random demo sets (labels not forced to
+  balance, so label positions vary). Each set is evaluated under min(K!, 8) distinct orders: all
+  orders for K ≤ 3, 8 random orders for K ≥ 4.
+- **Extension sets:** 10 more demo sets per K (seed 1042) for the 0.5B, 1.5B and 3B models.
+  These were skipped for 7B/14B to save GPU time on the shared host.
+- **SAMSum:** K ∈ {1, 2, 3, 4, 6}, 6 sets, min(K!, 6) orders, 80 test dialogues.
+- **Baseline:** zero-shot (K = 0).
+- **Total:** about 2.36 M scored prompts and generations.
+
+**Metrics.**
+- Accuracy for classification; ROUGE-L F1 (stemmed) for SAMSum.
+- *Order sensitivity* is computed per demo set, then averaged over sets:
+  - SD across orders;
+  - range (best − worst);
+  - **pairwise gap**, E|m(π) − m(π′)| over order pairs. Its expectation does not depend on how many
+    orders were sampled, so unlike the range it can be compared across K;
+  - prediction **flip rate** between two orders.
+- *Reliability of order effects:* split-half Spearman correlation of per-order scores across two
+  random halves of the test items (20 splits). This is compared with a **null** that shuffles order
+  labels independently within each test item, which keeps item-level variability but removes any
+  order-level structure.
+- *Position influence*, causal probes (`src/run_probe.py`). Both use demo sets 0–9 and the first
+  2 orders of each:
+  - **Label-flip (classification):** at K ∈ {4, 8}, flip the label of the demo at position i,
+    keeping all else fixed. Influence_i = mean increase in log P(flipped-to label) on the test items.
+  - **Style marker (SAMSum):** at K ∈ {4, 6}, rewrite demo i's summary to start with "In short, ".
+    Influence_i = increase in log P(output starts with " In short,") relative to a no-marker
+    control.
+  - The 14B probe was run only at K = 8 (classification) and K = 6 (SAMSum) to save time.
+- 95% CIs come from bootstrap resampling of demo sets (2,000 resamples).
+
+## 4. Results
+
+### 4.1 Accuracy by shot count (all orders and demo sets pooled; K=0 is zero-shot)
+
+| Model | SST-2 K0 / K1 / K4 / K8 | RTE K0 / K1 / K4 / K8 | MNLI K0 / K1 / K4 / K8 | SAMSum R-L K0 / K1 / K4 / K6 |
+|---|---|---|---|---|
+| 0.5B | 89.5 / 86.8 / 90.1 / 90.8 | 60.5 / 57.6 / 69.0 / 69.6 | 48.0 / 46.2 / 54.7 / 57.0 | 19.9 / 24.8 / 20.9 / 21.8 |
+| 1.5B | 92.5 / 93.5 / 93.5 / 93.9 | 77.5 / 77.8 / 82.6 / 83.1 | 64.0 / 64.6 / 65.5 / 66.1 | 27.3 / 32.0 / 34.8 / 34.9 |
+| 3B | 90.0 / 92.4 / 93.2 / 93.3 | 84.5 / 82.6 / 84.9 / 85.0 | 74.0 / 78.9 / 81.3 / 81.4 | 27.0 / 32.2 / 33.7 / 34.1 |
+| 7B | 91.5 / 93.6 / 93.3 / 93.4 | 88.0 / 84.5 / 86.1 / 85.7 | 81.0 / 83.3 / 83.3 / 84.0 | 33.5 / 36.0 / 36.0 / 37.5 |
+| 14B | 94.0 / 93.6 / 94.4 / 94.4 | 88.5 / 89.6 / 91.1 / 91.2 | 80.0 / 79.0 / 77.8 / 82.5 | 31.9 / 37.6 / 38.4 / 38.6 |
+
+Majority-class accuracy is about 50 (SST-2, RTE) and 33 (MNLI). Demonstrations help the small models
+most. Full table: `results/tables/accuracy_by_K.csv`; Fig. `figures/fig0_acc_vs_K.png`.
+
+### 4.2 H1 — order variance vs. shot count
+
+Mean pairwise order gap (points), pooled over models, from `results/tables/H1_pooled.csv`:
+
+| Task | K=2 | K=3 | K=4 | K=6 | K=8 | Spearman K vs gap, K≤4 (p) | K≥4 (p) |
+|---|---|---|---|---|---|---|---|
+| SST-2 | 0.94 | 1.10 | 1.19 | 1.02 | 1.12 | 0.17 (0.007) | 0.03 (0.63) |
+| RTE | 2.03 | 2.09 | 1.60 | 1.82 | 1.79 | −0.02 (0.71) | 0.07 (0.26) |
+| MNLI | 3.88 | 3.34 | 3.81 | 4.12 | 3.99 | 0.16 (0.016) | −0.02 (0.78) |
+| SAMSum (ROUGE-L) | 1.36 | 1.42 | 1.47 | 1.49 | – | 0.09 (0.40) | 0.07 (0.61) |
+
+(K = 1 has a single order, so its order variance is 0 by construction.)
+
+![pairwise gap vs K](figures/fig1_pairgap_vs_K.png)
+
+**Interpretation.**
+- From K = 2 up, the curve is essentially flat. On SST-2 and MNLI there is a weak but statistically
+  detectable upward trend over K = 2–4 (ρ ≈ 0.16–0.17; the K-means differ by under 0.5 points).
+  RTE and SAMSum show none.
+- Per model (`H1_variance_vs_K.csv`), only 1 of 20 task×model curves has a significant (p < .05)
+  rise over K = 2–4 (SST-2, 3B). For K ≥ 4, 3 of 20 curves show a significant trend, with mixed
+  signs (MNLI 0.5B up, MNLI 7B down, SAMSum 7B up); the rest are flat. So the curves do plateau, as
+  hypothesized, but from K = 2, not K = 4.
+- **Range artifact.** Plotting the *range* instead (Fig. `fig2_range_vs_K.png`) shows exactly the
+  hypothesized "rise until 4, then plateau" shape. That shape tracks the number of orders available
+  (2 → 6 → 8), because the max − min of more draws is larger. **H1 is not supported**; the apparent
+  support is a measurement artifact.
+
+![range vs K](figures/fig2_range_vs_K.png)
+
+### 4.3 H4 — best-to-worst order gap by task (K ≥ 4, 8 orders per demo set)
+
+| Task | Model | mean range | max range (worst demo set) | SD across orders | pairwise gap |
+|---|---|---|---|---|---|
+| MNLI | 0.5B / 1.5B / 3B / 7B / 14B | 13.3 / 11.1 / 7.8 / 5.9 / 8.1 | 21.7 / 17.5 / 11.7 / 9.8 / 11.7 | 4.7 / 4.0 / 2.7 / 2.1 / 2.8 | 5.5 / 4.5 / 3.1 / 2.4 / 3.2 |
+| RTE | same order | 6.8 / 5.0 / 2.9 / 2.7 / 2.3 | 12.5 / 8.5 / 5.2 / 5.2 / 4.0 | 2.4 / 1.7 / 1.0 / 0.9 / 0.8 | 2.8 / 2.0 / 1.1 / 1.1 / 0.9 |
+| SST-2 | same order | 4.8 / 2.8 / 2.2 / 1.2 / 1.0 | 15.5 / 6.7 / 6.0 / 2.0 / 1.5 | 1.8 / 1.0 / 0.8 / 0.4 / 0.4 | 2.0 / 1.1 / 0.9 / 0.5 / 0.4 |
+| SAMSum (R-L) | same order | 2.0 / 2.1 / 3.2 / 2.7 / 6.5 | 3.1 / 4.2 / 5.3 / 3.3 / 10.9 | 0.8 / 0.8 / 1.2 / 1.1 / 2.4 | 1.0 / 0.9 / 1.5 / 1.3 / 2.8 |
+
+- **Ordering of tasks:** NLI > sentiment holds for every model.
+- **">15 points on NLI":** not supported on average. Only the single worst MNLI demo set for 0.5B
+  (21.7) and 1.5B (17.5) exceeds 15. RTE never does.
+- **"<5 points on sentiment":** holds on average for every model. The worst-case demo set for 0.5B
+  still reaches 15.5 points.
+- Verdict: **partially supported**, as a direction rather than as thresholds.
+
+### 4.4 Are order effects real or item-level noise? (reliability analysis, K ≥ 3)
+
+| Task | 0.5B | 1.5B | 3B | 7B | 14B |
+|---|---|---|---|---|---|
+| **split-half ρ of per-order scores** | | | | | |
+| MNLI | 0.56 | 0.72 | 0.53 | 0.47 | 0.58 |
+| RTE | 0.45 | 0.47 | 0.18 | 0.10 | 0.23 |
+| SST-2 | 0.38 | 0.30 | −0.04 | −0.07 | 0.07 |
+| SAMSum | 0.26 | 0.22 | 0.47 | 0.38 | 0.67 |
+| **observed range / null range** | | | | | |
+| MNLI | 2.08 | 2.83 | 1.83 | 1.70 | 2.07 |
+| RTE | 1.79 | 1.60 | 1.22 | 1.11 | 1.23 |
+| SST-2 | 1.64 | 1.41 | 1.00 | 0.89 | 0.98 |
+| SAMSum | 1.22 | 1.39 | 1.80 | 1.54 | 2.67 |
+
+- **Where order effects are systematic:** MNLI for all sizes, and SAMSum for ≥3B (strongest at
+  14B). There, an order that is good on one half of the test items tends to be good on the other
+  half, and the observed range is about 2× what item-level noise produces.
+- **Where they are noise:** SST-2 for ≥3B, and RTE for ≥3B to a lesser degree. The "best" and
+  "worst" orders are indistinguishable from re-shuffled noise (ratio ≈ 1, ρ ≈ 0). This qualifies
+  every "best–worst gap" number above. On a 200-item test set, about 1–2 points of range appear
+  even when order has no systematic effect.
+
+### 4.4b Numerical noise floor (identical prompts re-run)
+
+vLLM bf16 inference is not bit-deterministic across batch compositions. To check that "order
+effects" are not just this numerical jitter, we re-ran the exact same prompts (K = 4, demo sets 0–2,
+all 8 orders) for each model and compared the two runs (`src/run_noise_floor.sh`,
+`src/run_noise_floor_large.sh`, table `results/tables/noise_floor.csv`).
+*noise share* = E[(rerun diff)²] / E[(order diff)²]: the fraction of the order-induced squared
+score differences that identical-prompt reruns also produce.
+
+| Model | Task | Pred. flips, rerun (%) | Pred. flips, order (%) | Mean abs gap, rerun (pts) | Mean pairwise order gap (pts) | Noise share |
+|---|---|---|---|---|---|---|
+| 0.5B | MNLI / RTE / SST-2 | 2.9 / 2.4 / 0.3 | 17.7 / 7.0 / 10.8 | 0.98 / 0.96 / 0.21 | 3.89 / 2.21 / 6.49 | 0.06 / 0.17 / 0.00 |
+| 1.5B | MNLI / RTE / SST-2 | 1.3 / 0.9 / 0.1 | 9.1 / 3.8 / 2.2 | 0.52 / 0.56 / 0.10 | 4.52 / 1.38 / 1.10 | 0.02 / 0.23 / 0.03 |
+| 3B | MNLI / RTE / SST-2 | 0.8 / 0.3 / 0.1 | 10.4 / 2.3 / 3.4 | 0.54 / 0.17 / 0.08 | 3.15 / 0.72 / 0.69 | 0.04 / 0.07 / 0.06 |
+| 7B | MNLI / RTE / SST-2 | 0.5 / 0.3 / 0.0 | 5.8 / 2.9 / 1.0 | 0.25 / 0.25 / 0.00 | 1.85 / 1.20 / 0.42 | 0.03 / 0.06 / 0.00 |
+| 0.5B / 1.5B / 3B / 7B | SAMSum (ROUGE-L) | 53 / 35 / 38 / 35 (outputs differ) | — | 0.47 / 0.53 / 0.40 / 0.51 | 0.84 / 0.80 / 2.31 / 0.90 | 0.30 / 0.42 / 0.03 / 0.35 |
+
+- **Classification order effects are real, not numerical artifacts.** Reruns flip 0–3% of
+  predictions, while order changes flip 1–18%. Numerical noise accounts for ≤ 6% of order variance
+  in 10 of 12 cells, with a maximum of 23% (RTE 1.5B).
+- **For generation, numerical noise is a large confound.** About 35–53% of greedy summaries
+  differ textually between identical runs. For 0.5B, 1.5B and 7B, 30–42% of the ROUGE-L order
+  variance at K = 4 is reproduced by reruns alone. Only 3B (noise share 0.03) shows clearly
+  above-noise order effects at K = 4. This weakens the SAMSum sensitivity numbers in §4.2 and §4.7
+  for those sizes. The marker-copy probe (§4.6) is less affected because it uses many
+  paired comparisons.
+- **14B could not be re-run.** Its bf16 weights (~30 GB) did not fit in the free memory on the
+  shared GPUs (≤ 23 GB) during this session. So the SAMSum claim that "14B is the most
+  order-sensitive" has no noise-floor check. Its high split-half reliability (ρ = 0.67, §4.4)
+  argues that the effect is systematic, since numerical noise should not be consistent across
+  halves of the test items.
+
+### 4.5 H2 — which positions influence classification? (causal label-flip probe)
+
+Influence = increase in log P(flipped-to label) when the demo at that position has its label
+flipped; units are nats, averaged over test items and 2 orders × 10 demo sets. K = 8:
+
+| Task | Model | pos 1 | pos 2–7 (mean) | pos 8 | last/first [95% CI] |
+|---|---|---|---|---|---|
+| SST-2 | 0.5B | −0.23 | 0.30 | 0.73 | n/a (first < 0) |
+| SST-2 | 1.5B | 0.27 | 0.80 | 0.64 | **2.42 [1.83, 3.50]** |
+| SST-2 | 3B | 0.72 | 0.81 | 0.61 | 0.84 [0.52, 1.37] |
+| SST-2 | 7B | 0.79 | 1.10 | 0.39 | 0.49 [0.25, 0.87] |
+| SST-2 | 14B | 1.25 | 1.14 | 0.70 | 0.57 [0.29, 0.88] |
+| RTE | 0.5B | −0.10 | 0.01 | −0.10 | n/a |
+| RTE | 1.5B | 0.14 | 0.13 | −0.08 | −0.56 [−1.75, 0.23] |
+| RTE | 3B | 0.76 | 0.59 | 0.20 | 0.27 [0.02, 0.52] |
+| RTE | 7B | 0.99 | 1.61 | 1.79 | **1.81 [1.27, 2.44]** (K=4: 2.22 [1.71, 2.97]) |
+| RTE | 14B | 1.10 | 1.26 | 1.31 | 1.19 [0.88, 1.60] |
+| MNLI | 0.5B | −0.37 | 0.08 | 0.12 | n/a (first < 0) |
+| MNLI | 1.5B | 0.27 | 0.21 | −0.25 | −0.92 [−1.46, −0.46] |
+| MNLI | 3B | 0.65 | 0.62 | −0.28 | −0.43 [−0.90, −0.03] |
+| MNLI | 7B | 1.95 | 1.85 | 1.90 | 0.97 [0.63, 1.52] |
+| MNLI | 14B | 1.65 | 1.95 | 1.53 | 0.93 [0.58, 1.37] |
+
+![label flip influence](figures/fig4b_cls_labelflip_influence.png)
+
+**Findings.**
+- **"Last ≈ 2–3× first" (H2) holds in only two of 15 model×task cells (K = 8):** SST-2 with 1.5B
+  (2.4×, CI excludes 1) and RTE with 7B (1.8× [1.27, 2.44]; 2.2× at K = 4). At K = 4, 1.5B SST-2
+  gives 1.5× [0.99, 2.6]. For 0.5B on SST-2, influence rises steeply toward the end (0.73 at the last
+  position) but the first position is slightly *negative*, so a ratio is meaningless; this is
+  recency in shape. Several cells point the other way: SST-2 7B (0.49×) and 14B (0.57×) weight
+  *early* demos more.
+- **NLI shows anti-recency for 1.5B and 3B.** Flipping the *last* demo's label lowers the
+  probability of that label (e.g. 3B MNLI K = 4: −0.79 nats for the last position vs +0.61 for the
+  first). The prediction-level probe agrees: −4.2 percentage points toward the flipped label for 3B
+  MNLI at K = 8. One possible mechanism is that when the demo closest to the test item looks
+  *inconsistent*, the model contrasts away from it rather than copying it. We did not test this.
+- **Unmanipulated prompts agree.** How often the prediction matches the label of the demo at each
+  position (`cls_label_agreement_by_position.csv`): for 3B MNLI at K = 8, 36.4% at position 1 vs
+  30.8% at position 8 (chance ≈ 33%). For 14B, 36.8% vs 31.8%. For 0.5B SST-2, 47.8% vs 52.8%, the
+  only clear recency case.
+- **14B is roughly position-uniform** on RTE and MNLI, and mildly primacy-weighted on SST-2.
+- **Verdict:** H2 is **not supported** as a general claim. Recency appears in a few model×task cells
+  (small models on SST-2, 7B on RTE). Mid-size models on NLI show primacy or anti-recency, and the
+  larger models on SST-2 show mild primacy. The direction of the position effect depends on both
+  model and task.
+- An observational regression estimate on the natural, unmanipulated prompts is also provided
+  (`cls_position_influence.csv`, Fig. `fig4_cls_position_influence_regression.png`). Its absolute
+  per-position values are poorly identified: they come mostly from label-composition differences
+  between only 10–20 demo sets, which are confounded with demo content. Only within-set
+  last-minus-first contrasts are clean, so we treat the causal probe as primary.
+
+### 4.6 H3 — which positions influence generation? (style-marker probe, SAMSum)
+
+Increase in log P(output begins " In short,") when demo *i*'s summary begins with "In short, ",
+relative to no marker (nats):
+
+| Model | K | pos 1 | pos 2 | pos 3 | pos 4 | pos 5 | pos 6 | first/last [95% CI] |
+|---|---|---|---|---|---|---|---|---|
+| 0.5B | 6 | 5.75 | 6.96 | 7.07 | 7.39 | 7.77 | 9.04 | 0.64 [0.59, 0.68] |
+| 1.5B | 6 | 7.56 | 9.87 | 10.29 | 10.66 | 10.61 | 11.13 | 0.68 [0.62, 0.74] |
+| 3B | 6 | 11.70 | 13.86 | 14.60 | 14.90 | 15.52 | 15.86 | 0.74 [0.72, 0.75] |
+| 7B | 6 | 14.10 | 13.85 | 14.26 | 14.10 | 14.00 | 13.76 | 1.02 [1.00, 1.05] |
+| 14B | 6 | 10.30 | 10.21 | 10.31 | 10.20 | 10.10 | 10.49 | 0.98 [0.95, 1.01] |
+
+At K = 4 the pattern is the same: first/last = 0.72 (0.5B), 0.79 (1.5B), 0.80 (3B), 1.03 [1.02, 1.05] (7B).
+
+![marker influence](figures/fig5b_gen_marker_influence.png)
+
+- **Generation shows recency, not primacy, for small models.** Influence rises monotonically with
+  position for 0.5B–3B (first/last 0.64–0.80, CIs exclude 1). At 7B it is essentially flat, with a
+  statistically detectable but tiny primacy (first/last 1.02–1.03, i.e. about 3%). At 14B it is
+  position-independent (0.98).
+- **H3 ("primacy dominates for generation") is refuted.** The only primacy observed (7B) is about
+  2 orders of magnitude smaller than the recency seen in the smaller models.
+- A secondary, non-causal measure — lexical copying of each demo's summary words into the output
+  (`gen_copy_by_position.csv`, Fig. `fig6_gen_copy_by_position.png`) — is small (<1.5% of output
+  words) and noisy, with no consistent primacy.
+
+### 4.7 H5 — model size vs. order sensitivity
+
+![size](figures/fig7_size_vs_sensitivity.png)
+
+Mean pairwise gap (K ≥ 2) by size, 0.5B → 14B:
+
+| Task | Pairwise gap, 0.5B → 14B | Spearman ρ (p) |
+|---|---|---|
+| SST-2 | 2.10 → 1.01 → 0.76 → 0.44 → 0.39 | −1.0 (<.001) |
+| RTE | 2.96 → 2.37 → 1.16 → 1.00 → 0.92 | −1.0 (<.001) |
+| MNLI | 5.14 → 4.27 → 2.92 → 2.37 → 3.60 | −0.7 (0.19) |
+| SAMSum, ROUGE-L | 0.96 → 1.28 → 1.45 → 1.20 → 2.29 | +0.7 (0.19) |
+
+Prediction flip rates between two orders fall from 4.6% to 0.6% (SST-2), 9.1% to 1.9% (RTE) and
+22% to 10% (MNLI).
+
+**H5 is supported for classification on SST-2 and RTE, but not universally.** On MNLI, 14B is more
+sensitive than 7B. On generation, sensitivity *grows* with size: 14B's summaries change more with
+order, and reproducibly so (split-half ρ = 0.67). Only 5 sizes from one family were tested, so the
+p-values for the trends are necessarily coarse.
+
+## 5. Discussion
+
+- **What survives from the hypothesis.**
+  - NLI is more order-sensitive than sentiment.
+  - Bigger models are usually less order-sensitive on classification.
+  - Order variance is flat at higher K (the "plateau").
+- **What does not survive.**
+  - The specific 4-shot threshold. With an unbiased metric the plateau is reached at K = 2; the
+    best–worst range only *looks* like it rises until 4-shot because more orders become available
+    as K grows (2, then 6, then 8 sampled). Studies that report ranges over K! or a fixed small
+    number of permutations should be read with this in mind.
+  - The 15 / 5 point thresholds.
+  - The recency/primacy split. Recency appears where it was not predicted (generation) and
+    fails where it was (NLI).
+- **Relation to prior work.**
+  - Zhao et al.'s recency bias, found in GPT-3 *base* models on sentiment-like tasks, shows up here
+    only in the smallest instruction-tuned models on SST-2. Instruction tuning and scale appear to
+    remove it.
+  - Lu et al. reported that order sensitivity does not vanish with scale. We find it shrinks
+    substantially on easy tasks but persists on MNLI, and grows for generation at 14B.
+- **The most practically useful finding is the reliability analysis.** Whether a "best order"
+  exists depends on task and model. For strong models on easy tasks, order differences are
+  indistinguishable from item-level noise, so tuning order on a dev set would overfit. Where effects
+  are systematic (MNLI; generation at ≥3B), averaging over orders or searching for an order is
+  justified.
+- **Error analysis notes.**
+  - 0.5B summaries usually run to the 80-token cap with repetitive text (median 67 words vs 24 for
+    14B), which explains its low, flat ROUGE-L.
+  - On MNLI, 14B accuracy *drops* below zero-shot at K = 2–4 (77–78 vs 80) and recovers at K = 8.
+    Demonstrations can hurt strong models when few and unbalanced.
+  - The anti-recency effect on NLI is concentrated in the final position: the influence profile is
+    flat for earlier positions, then turns negative (Fig. 4b).
+
+## 6. Limitations
+
+- **One model family** (Qwen2.5-Instruct), deterministic decoding, plain-text prompts, one template
+  per task. Other families or chat-formatted prompts may behave differently. No frontier API
+  models were available on the host.
+- **Test sets** have 200 items (classification) and 80 (SAMSum), so per-order accuracy has roughly
+  ±3 points of item-level noise. Section 4.4 quantifies this.
+- **Uneven demo-set counts.** 10 demo sets per K (20 for ≤3B). Orders per set were capped at 8, so
+  best–worst ranges are lower bounds of the true K!-order range (8! = 40,320).
+- **Reduced probes for the largest models.** The 14B probe used only K = 8 (classification) and
+  K = 6 (SAMSum). 7B and 14B did not get the 10 extension demo sets (GPU time on a shared host).
+- **The generation probe** measures one kind of influence (copying a surface-style marker). Primacy
+  in content or ordering of facts was not tested. SAMSum is the only generation task.
+- **Contamination.** SST-2, GLUE and SAMSum are public and likely in the pretraining data. This
+  affects absolute accuracy more than order effects.
+- **Non-deterministic inference.** vLLM bf16 outputs vary between identical runs. This is
+  negligible for classification but accounts for about a third of the measured SAMSum order
+  variance for most sizes (§4.4b). There is no 14B noise-floor run.
+- **Size trends** rest on 5 points, so ρ = ±0.7 is not significant.
+
+## 7. Conclusions & Next Steps
+
+Demo order changes few-shot performance by about 1–13 points of best–worst range, depending
+strongly on task and model. Variance plateaus already at 2 shots. Position influence is
+task-dependent rather than a universal recency (classification) / primacy (generation) split: we see
+recency for small models on sentiment and for generation, and primacy or anti-recency for mid-size
+models on NLI. Scale reduces order sensitivity for simple classification but not for NLI or
+summarization. Order effects on easy tasks with capable models are mostly noise.
+
+**Follow-ups.**
+1. Replicate on other families (Llama-3.x, Gemma, an API model) and with chat templates.
+2. Investigate the NLI anti-recency mechanism: is it contrast from an inconsistent nearest
+   demonstration? Try flipping to *correct* vs *incorrect* labels.
+3. Larger test sets and full permutation enumeration for K ≤ 5, to estimate true worst cases.
+4. Content-level primacy probes for generation (e.g. which demo's entities or structure get copied).
+5. Test whether order-averaging (ensembling over orders) recovers the systematic MNLI losses.
+
+## References / Resources
+
+- Lu et al., 2022. *Fantastically Ordered Prompts and Where to Find Them.* ACL.
+- Zhao et al., 2021. *Calibrate Before Use: Improving Few-Shot Performance of Language Models.* ICML.
+- Liu et al., 2023. *Lost in the Middle: How Language Models Use Long Contexts.* TACL.
+- Datasets: SST-2 (Socher et al., 2013), GLUE RTE / MNLI (Wang et al., 2018; Williams et al.,
+  2018), SAMSum (Gliwa et al., 2019), via Hugging Face Hub.
+- Models: Qwen2.5-Instruct (Qwen Team, 2024). Tools: vLLM 0.31, PyTorch 2.13, pandas, SciPy,
+  rouge-score.
+
+**Reproducibility.** Seeds 42 (design), 1042 (extension), 7 (probe label choice) and 0 (bootstrap).
+All raw outputs are in `results/raw/`, tables in `results/tables/`, hypothesis summaries in
+`results/summary.json`, and figures in `figures/`. Run times on the shared A6000: 0.5B ≈ 5 min,
+1.5B ≈ 7 min, 3B ≈ 30 min, 7B ≈ 74 min and 14B ≈ 68 min per main sweep; probes 5–50 min each.
+
+
+════════════════════════════════════════════════════════════════════════════════
+                            RESEARCH PLAN
+════════════════════════════════════════════════════════════════════════════════
+
+# Planning: Few-Shot Example Ordering Effects on In-Context Learning
+
+## Motivation & Novelty Assessment
+
+### Why This Research Matters
+Few-shot prompting is the default way practitioners adapt LLMs, yet the *order* of demonstrations is an
+uncontrolled nuisance variable. If ordering can swing accuracy by double digits, reported few-shot numbers
+are partly noise and prompt designers need order-robust practices. Knowing *when* (task type, shot count,
+model size) ordering matters tells practitioners where to invest in order search or calibration.
+
+### Gap in Existing Work
+Note: the resource-finder stage was skipped for this workspace (no `literature_review.md`, `papers/`,
+`code/`), so this assessment relies on well-known prior work:
+- Lu et al. 2022 ("Fantastically Ordered Prompts") — order sensitivity for GPT-2/GPT-3 on classification;
+  large gaps, not reduced by scale, but on old base models and mostly single shot counts.
+- Zhao et al. 2021 ("Calibrate Before Use") — recency bias (majority/last label) for GPT-3.
+- Liu et al. 2023 ("Lost in the Middle") — U-shaped position effects in long-context retrieval/QA.
+These do not jointly measure (a) how order variance scales with shot count, (b) *per-position influence*
+quantitatively (first vs last), (c) classification vs generation under one protocol, and (d) a clean
+within-family size sweep on modern instruction-tuned models.
+
+### Our Novel Contribution
+A single controlled protocol on the Qwen2.5-Instruct family (0.5B→14B) that measures, for sentiment
+(SST-2), NLI (RTE, MNLI), and summarization (SAMSum): order variance vs. K∈{1..8}, best–worst order gaps,
+and a regression-based per-position influence estimate that directly tests "last example 2–3× more
+influential than first" (classification) and "primacy dominates" (generation).
+
+### Experiment Justification
+- Exp 1 (shot-count sweep, classification): needed for the "variance rises until 4-shot then plateaus" claim
+  and the NLI (>15%) vs sentiment (<5%) gap claim.
+- Exp 2 (position-influence regression, re-using Exp 1 prompts): tests recency for classification.
+- Exp 3 (SAMSum generation sweep): tests primacy for generation (output length / lexical copying traced
+  to each demo position) and generation order variance.
+- Exp 4 (model-size sweep, all above across 5 sizes): tests "larger models less order-sensitive".
+
+## Research Question
+How does the order of few-shot demonstrations affect ICL performance as a function of shot count, task
+type, and model size, and which demo positions dominate the model's output?
+
+## Hypothesis Decomposition
+- H1: Across-order SD of accuracy increases from K=1 to K=4, then is flat (K=4,6,8 not different).
+- H2: Classification: influence of last demo ≥2× influence of first demo (recency).
+- H3: Generation: influence of first demo > influence of last demo (primacy).
+- H4: Best–worst order gap >15 points on NLI (RTE/MNLI), <5 points on SST-2.
+- H5: Order sensitivity (SD, gap) decreases with parameter count.
+
+## Proposed Methodology
+
+### Approach
+Real models, run locally with vLLM on one RTX A6000 (no API keys available on this host).
+Models: Qwen2.5-{0.5B,1.5B,3B,7B,14B}-Instruct (same family/data → cleanest size comparison).
+Plain-text completion prompts (no chat template), greedy / argmax decoding (deterministic, so all
+variance across orders is caused by order).
+
+### Experimental Steps
+1. Fixed test sets: SST-2 val (200, balanced), RTE val (200), MNLI-matched val (201, balanced).
+2. For each K∈{1,2,3,4,6,8}: sample S=10 demo sets from train (random labels, not forced balanced so
+   label positions vary); for each set evaluate P=min(K!,8) distinct permutations on all test items.
+3. Classification scoring: next-token log-probs restricted to the label words; prediction = argmax.
+4. SAMSum: K∈{1,2,3,4,6}, S=6 sets, P=min(K!,6) orders, N=80 test dialogues; greedy, ≤80 tokens.
+5. Repeat for all five models.
+
+### Baselines
+Zero-shot (K=0) per task/model; majority-class; across-demo-set variance (to contextualize order variance
+against "which examples" variance).
+
+### Evaluation Metrics
+- Accuracy (classification), ROUGE-L F1 (generation).
+- Order sensitivity per demo set: SD across orders; range (best−worst); and *expected pairwise gap*
+  E|acc(π)−acc(π')| (unbiased w.r.t. number of permutations sampled, comparable across K).
+- Position influence β_i: regression of the model's label log-prob score on "demo at position i has
+  label c" with test-item × class fixed effects; for generation, regression of output length on
+  demo-i summary length (test FE) and lexical copying overlap with demo i.
+
+### Statistical Analysis Plan
+Bootstrap CIs over demo sets (resampling sets); Mann–Whitney / Welch tests for K comparisons;
+cluster-robust (by prompt) SEs for β; Spearman correlation for size trend; α=0.05, Holm correction
+within each hypothesis family.
+
+## Expected Outcomes
+Support: SD rises K=1→4 then flat; β_last/β_first ∈[2,3]; generation β_first>β_last; NLI gap>15,
+SST-2 gap<5; Spearman(size, SD)<0. Any deviation is reported as refutation of that sub-claim.
+
+## Timeline and Milestones
+Setup 30 min; code + pilot 45 min; runs ~2–3 h GPU; analysis 45 min; write-up 30 min.
+
+## Potential Challenges
+- Shared GPU may become busy → keep models ≤14B, checkpoint per model/task.
+- Label tokens missing from top-k logprobs → request top-20 and floor-fill; log coverage.
+- Small K!: K=2 only has 2 orders, K=3 has 6 → use pairwise-gap metric that is unbiased in P.
+- Test-set sampling noise in accuracy (N=200 → SE≈3.5pt) inflates order SD slightly; report it.
+
+## Success Criteria
+All five hypotheses receive a clear supported/refuted verdict with CIs, from real model outputs.
+
+
+════════════════════════════════════════════════════════════════════════════════
+                          LITERATURE REVIEW
+════════════════════════════════════════════════════════════════════════════════
+
+No literature_review.md found
+
+════════════════════════════════════════════════════════════════════════════════
+                          PAPER REQUIREMENTS
+════════════════════════════════════════════════════════════════════════════════
+
+Generate a complete academic paper with the following structure:
+
+1. TITLE
+   - Clear, specific, informative
+   - Should convey main finding or contribution
+
+2. AUTHOR
+   - Use this exact author line in the \author{} block: NeuriCo
+
+3. ABSTRACT (150-250 words)
+   - Problem statement
+   - Approach
+   - Key results
+   - Significance
+
+4. INTRODUCTION
+   - Research problem and motivation
+   - Gap in existing work
+   - Our contribution (be specific)
+   - Paper organization
+
+5. RELATED WORK
+   - Organized by theme/approach
+   - Position our work relative to prior work
+   - Cite papers from literature review
+
+6. METHODOLOGY
+   - Clear description of approach
+   - Experimental setup
+   - Datasets used
+   - Evaluation metrics
+   - Baselines
+
+7. RESULTS
+   - Present results with tables and figures
+   - Statistical analysis
+   - Comparison to baselines
+   - Ablation studies (if applicable)
+
+8. DISCUSSION
+   - Interpretation of results
+   - Limitations
+   - Broader implications
+
+9. CONCLUSION
+   - Summary of contributions
+   - Key findings
+   - Future work
+
+10. REFERENCES
+   - BibTeX format
+   - All cited papers
+
+════════════════════════════════════════════════════════════════════════════════
+                          OUTPUT FORMAT
+════════════════════════════════════════════════════════════════════════════════
+
+Create a MODULAR LaTeX project with the following directory structure:
+
+paper_draft/
+├── main.tex              # Main file that imports all sections
+├── references.bib        # BibTeX references
+├── sections/
+│   ├── abstract.tex      # Abstract content
+│   ├── introduction.tex  # Introduction section
+│   ├── related_work.tex  # Related work section
+│   ├── methodology.tex   # Methodology section
+│   ├── results.tex       # Results section
+│   ├── discussion.tex    # Discussion section
+│   └── conclusion.tex    # Conclusion section
+├── figures/              # Directory for any generated figures
+├── tables/               # Directory for complex standalone tables
+└── appendix/             # Directory for appendix sections (if needed)
+
+INSTRUCTIONS:
+1. First, create the directory structure above (mkdir -p paper_draft/sections paper_draft/figures paper_draft/tables paper_draft/appendix)
+2. Write main.tex using the EXACT preamble for NEURIPS:
+
+   \documentclass{article}
+   \usepackage[final]{neurips_2025}  % NEURIPS style (neurips_2025.sty is in paper_draft/)
+   \usepackage[hidelinks]{hyperref}  % REQUIRED: clickable links
+   \usepackage{booktabs}  % REQUIRED: professional tables
+   \usepackage{graphicx}
+   \usepackage{amsmath,amssymb}
+
+   % Import command files
+   \input{commands/math}
+   \input{commands/general}
+   \input{commands/macros}
+
+   % Use this bibliography style:
+   \bibliographystyle{plainnat}
+
+   \author{NeuriCo}
+
+   - Use \input{sections/...} to include each section
+   - Use \bibliography{references} for references
+3. Write each section file with COMPLETE content (no placeholders)
+4. Each section file should include its \section{} command
+5. Write references.bib with all citations in BibTeX format
+6. After writing all files, compile the paper:
+   cd paper_draft && pdflatex -interaction=nonstopmode main.tex && bibtex main && pdflatex -interaction=nonstopmode main.tex && pdflatex -interaction=nonstopmode main.tex
+
+This modular structure allows humans to easily:
+- Edit individual sections without navigating a large file
+- Track changes per section
+- Reuse sections across different paper versions
+
+════════════════════════════════════════════════════════════════════════════════
+                          QUALITY REQUIREMENTS
+════════════════════════════════════════════════════════════════════════════════
+
+- Academic tone throughout
+- All claims must be supported by data from the experiment report
+- Proper citations using \cite{} commands
+- Clear figures and tables with proper captions
+- NO placeholder text - every section must have real content
+- The paper MUST compile without errors
+- If compilation fails, debug and fix the LaTeX errors
+
+════════════════════════════════════════════════════════════════════════════════
+                          LAB WRITING STYLE
+════════════════════════════════════════════════════════════════════════════════
+
+Follow these lab-specific conventions to match our paper style:
+
+1. LANGUAGE STYLE:
+   - Use active voice: "We propose", "We examine", "We focus on"
+   - Be direct and confident: "Our main question is...", "We hypothesize that..."
+   - State things clearly and simply - prefer plain language over jargon
+   - Use bold questions as paragraph organizers: {\bf what is X?}
+   - Include specific quantitative claims: "8.97% over baseline"
+   - Avoid fancy wording: "utilize" → "use", "facilitate" → "help"
+
+2. INTRODUCTION STRUCTURE:
+   - Engaging hook (get to the point quickly)
+   - Problem importance
+   - Gap identification
+   - Your approach with method figure reference
+   - Quantitative preview of results
+   - Contribution bullets (3-4 items, action verbs)
+
+3. CONTRIBUTION LISTS:
+   \begin{itemize}[leftmargin=*,itemsep=0pt,topsep=0pt]
+       \item We propose...
+       \item We conduct...
+       \item We complement...
+   \end{itemize}
+
+4. MODULAR COMMANDS STRUCTURE:
+   Command templates are pre-copied to paper_draft/commands/:
+   - math.tex: Math notation macros
+   - general.tex: Formatting macros
+   - macros.tex: Project-specific term definitions (customize this for your paper)
+
+   In main.tex, include:
+   \input{commands/math}
+   \input{commands/general}
+   \input{commands/macros}
+
+5. REFERENCE CONVENTIONS:
+   Use reference macros from math.tex:
+   - \figref{fig:name} for "figure 1" (lowercase, in-sentence)
+   - \Figref{fig:name} for "Figure 1" (capitalized, start of sentence)
+   - \secref{sec:name} for "section 2"
+
+6. TEXT FORMATTING:
+   - Use \para{Header text} for bold paragraph headers
+   - Define method/dataset names with \textsc and \xspace:
+     \newcommand{\methodname}{\textsc{MethodName}\xspace}
+
+7. TABLE FORMATTING:
+   - Use booktabs package (no vertical lines)
+   - Use \resizebox{\textwidth}{!}{...} for wide tables
+   - Use @{} to remove padding at table edges
+   - Use \cmidrule(lr){x-y} for sub-headers
+   - Use \textsc{} for dataset/method names in headers
+   - Bold best results with {\bf ...}
+
+8. FIGURE FORMATTING:
+   - Use 0.32\textwidth for 3-column subfigures
+   - Use 0.95\linewidth for full-width figures
+   - Use \input{figures/legend} for shared legends
+   - Write self-contained captions explaining key observations
+
+9. RESULTS PRESENTATION:
+   - Define \increase and \decrease for colored arrows (green up, red down)
+   - Bold best results in tables
+   - Report confidence intervals when available
+
+10. ALGORITHM STYLING:
+    - Use algpseudocode with [noend]
+    - Use \triangleright for comments
+
+11. HYPERLINKS (REQUIRED):
+    - Always use \usepackage[hidelinks]{hyperref} or with colored links
+    - All citations, section refs, figure refs, table refs must be clickable
+    - This is essential for reader navigation
+
+════════════════════════════════════════════════════════════════════════════════
+                          WORKFLOW: REVIEW AND REFLECT
+════════════════════════════════════════════════════════════════════════════════
+
+Before calling finish, you MUST complete these review steps:
+
+1. REVIEW RESOURCES (at the start):
+   - Read .claude/skills/paper-writer/SKILL.md for detailed guidance
+   - Study templates/paper_writing/lab_style_guide.md for style conventions
+   - Browse paper_examples/ for formatting and language patterns
+
+2. SELF-REFLECTION (before finishing):
+   After writing all sections, review your work against these criteria:
+
+   LANGUAGE CHECK:
+   - [ ] Is the writing clear and jargon-free?
+   - [ ] Are claims specific with quantitative support?
+   - [ ] Is active voice used throughout?
+
+   FORMATTING CHECK:
+   - [ ] Does main.tex include \input{commands/math}, \input{commands/general}, \input{commands/macros}?
+   - [ ] Is hyperref package included for clickable references?
+   - [ ] Do tables use booktabs (no vertical lines)?
+   - [ ] Are best results bolded in tables?
+   - [ ] Are figures/tables properly captioned?
+
+   STRUCTURE CHECK:
+   - [ ] Does introduction follow: hook → importance → gap → approach → preview → contributions?
+   - [ ] Are contribution bullets specific with action verbs?
+   - [ ] Does the paper compile without errors?
+
+3. FIX ISSUES:
+   - Address any issues found in the self-reflection
+   - Re-compile and verify the PDF looks correct
+
+Only after completing this review should you consider the paper finished.

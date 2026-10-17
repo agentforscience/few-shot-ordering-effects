@@ -1,0 +1,24 @@
+\section{Related Work}
+\label{sec:related}
+
+\para{Order sensitivity in in-context learning.}
+In-context learning with demonstrations was popularized by GPT-3~\cite{brown2020language}.
+\citet{lu2022fantastically} showed that permuting the same demonstrations can move GPT-2 and GPT-3 classification accuracy from near chance to near state of the art, that this sensitivity did not shrink with model size, and that good orders do not transfer across models; they proposed selecting orders with entropy statistics on a synthetic probing set.
+\citet{zhao2021calibrate} traced part of this instability to majority-label, recency and common-token biases, and corrected them with contextual calibration.
+Unlike these studies, which used base models of the GPT-2/3 era and mostly reported ranges over sampled permutations, we study a modern instruction-tuned family, use a sensitivity metric that is unbiased in the number of sampled orders, and test whether order effects exceed item-level and numerical noise.
+
+\para{Position effects in long contexts.}
+\citet{liu2024lost} found that LLMs use information at the start and end of long contexts better than information in the middle.
+That work studies retrieval of one relevant passage among many distractors.
+We instead study short prompts in which every demonstration is relevant, and ask how much each position steers the output.
+We measure this with direct interventions on one position at a time rather than by moving a single relevant item.
+
+\para{What demonstrations contribute.}
+\citet{min2022rethinking} found that the format and label space of the demonstrations matter more than whether their labels are correct.
+Our label-flip probe builds on this observation: it asks whether flipping a single label, at a given position, moves the model toward that label.
+We find that it often does, but that for mid-size models on NLI a flipped final label moves predictions \emph{away} from it.
+Work on demonstration \emph{selection}~\cite{liu2022makes,rubin2022learning} chooses which examples to show; we hold the selected set fixed and vary only the order, so our results describe the variance that remains after selection.
+
+\para{Evaluation variance.}
+Prompt-format choices can change LLM accuracy by large margins~\cite{sclar2024quantifying}, which suggests that many reported gains are within the noise of prompt design.
+We contribute two checks for the order dimension of this problem: a split-half reliability test that asks whether a good order stays good on held-out test items, and an identical-prompt rerun that measures the non-determinism of batched bf16 inference in vLLM~\cite{kwon2023efficient}.

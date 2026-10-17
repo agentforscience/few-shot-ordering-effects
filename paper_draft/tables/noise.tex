@@ -1,0 +1,18 @@
+\begin{table}[t]
+\centering
+\caption{Numerical noise floor: identical prompts re-run ($K=4$, demonstration sets 0--2, all 8 orders). ``Noise share'' is the fraction of order-induced squared score differences that identical reruns also produce. For \samsum, ``flips'' are the percentage of summaries whose text differs between runs. The 14B model could not be re-run (\secref{sec:limitations}).}
+\label{tab:noise}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}llccccc@{}}
+\toprule
+Model & Task(s) & Flips, rerun (\%) & Flips, order (\%) & Abs.\ gap, rerun (pts) & \pgap, order (pts) & Noise share \\
+\midrule
+0.5B & \mnli / \rte / \sst & 2.9 / 2.4 / 0.3 & 17.7 / 7.0 / 10.8 & 0.98 / 0.96 / 0.21 & 3.89 / 2.21 / 6.49 & 0.06 / 0.17 / 0.00 \\
+1.5B & \mnli / \rte / \sst & 1.3 / 0.9 / 0.1 & 9.1 / 3.8 / 2.2 & 0.52 / 0.56 / 0.10 & 4.52 / 1.38 / 1.10 & 0.02 / 0.23 / 0.03 \\
+3B & \mnli / \rte / \sst & 0.8 / 0.3 / 0.1 & 10.4 / 2.3 / 3.4 & 0.54 / 0.17 / 0.08 & 3.15 / 0.72 / 0.69 & 0.04 / 0.07 / 0.06 \\
+7B & \mnli / \rte / \sst & 0.5 / 0.3 / 0.0 & 5.8 / 2.9 / 1.0 & 0.25 / 0.25 / 0.00 & 1.85 / 1.20 / 0.42 & 0.03 / 0.06 / 0.00 \\
+\midrule
+0.5B / 1.5B / 3B / 7B & \samsum & 53 / 35 / 38 / 35 & -- & 0.47 / 0.53 / 0.40 / 0.51 & 0.84 / 0.80 / 2.31 / 0.90 & 0.30 / 0.42 / \textbf{0.03} / 0.35 \\
+\bottomrule
+\end{tabular}}
+\end{table}

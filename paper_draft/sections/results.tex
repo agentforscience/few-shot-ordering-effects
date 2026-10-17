@@ -1,0 +1,142 @@
+\section{Results}
+\label{sec:results}
+
+\input{tables/accuracy}
+
+\para{Demonstrations help small models most.}
+\Tabref{tab:accuracy} gives the accuracy context for all later results.
+All models are well above the majority class.
+Demonstrations add the most for small models (0.5B on \rte: 60.5 zero-shot \vsx 69.6 at $K=8$) and little for large ones (14B on \sst: 94.0 \vsx 94.4).
+On \mnli, 14B accuracy \emph{drops} below zero-shot at $K=4$ (77.8 \vsx 80.0) and recovers at $K=8$ (82.5), so a few unbalanced demonstrations can hurt a strong model.
+
+\subsection{H1: order variance is flat from two shots on}
+\label{sec:h1}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\linewidth]{figures/fig1_pairgap_vs_K.png}
+\includegraphics[width=0.95\linewidth]{figures/fig2_range_vs_K.png}
+\caption{Order sensitivity \vsx shot count $K$ for each task and model (shaded: 95\% bootstrap CI over demonstration sets). \figtop Mean pairwise gap (\pgap), whose expectation does not depend on the number of orders sampled: from $K=2$ the curves are roughly flat. \figbottom Best--worst range over the sampled orders: it shows a ``rise until $K=3$--4, then plateau'' shape, which tracks the number of available orders (2 at $K=2$, 6 at $K=3$, 8 for $K\geq4$) rather than the model.}
+\label{fig:h1}
+\end{figure}
+
+\input{tables/h1}
+
+{\bf Does order variance rise until 4 shots and then plateau?}
+\Tabref{tab:h1} and \figref{fig:h1} (top) show that it does not.
+Measured with \pgap, order variance is already at its plateau at $K=2$.
+Over $K=2$--4 there is a weak upward trend on \sst and \mnli ($\rho\approx0.16$--$0.17$, $p<0.02$), but the $K$-means differ by less than 0.5 points; \rte and \samsum show no trend.
+Per model, only 1 of 20 task--model curves rises significantly over $K=2$--4 (\sst, 3B).
+For $K\geq4$, 3 of 20 curves have a significant trend, with mixed signs (\mnli 0.5B up, \mnli 7B down, \samsum 7B up).
+
+The best--worst range, in contrast, shows exactly the hypothesized shape (\figref{fig:h1}, bottom): on \mnli, for instance, the 0.5B range climbs from about 5 points at $K=2$ to about 11 at $K=4$.
+This shape follows the number of orders we can sample (2, then 6, then 8), because the maximum minus the minimum of more draws is larger.
+{\bf H1 is not supported}; the apparent support is a measurement artifact.
+Studies that compare ranges over all $K!$ orders, or over a fixed small number of permutations, across shot counts should be read with this in mind.
+
+\subsection{H4: NLI is more order-sensitive than sentiment, but the thresholds fail}
+\label{sec:h4}
+
+\input{tables/h4}
+
+\Tabref{tab:h4} reports sensitivity at $K\geq4$, where every demonstration set has 8 orders.
+NLI is more order-sensitive than sentiment for every model: the mean range is 5.9--13.3 points on \mnli and 2.3--6.8 on \rte, against 1.0--4.8 on \sst.
+The thresholds, however, fail.
+No model has a mean \mnli range above 15 points, and \rte never exceeds 15 even in its worst demonstration set (12.5).
+Only the single worst \mnli set for 0.5B (21.7) and 1.5B (17.5) exceeds 15.
+The ``below 5 points on sentiment'' part holds on average, but the worst \sst set for 0.5B still reaches 15.5 points.
+{\bf H4 is partially supported}: as a direction, not as thresholds.
+Because we cap orders at 8 per set, these ranges are lower bounds on the range over all $K!$ orders.
+
+\subsection{Are order effects real?}
+\label{sec:reliability}
+
+\input{tables/reliability}
+
+A best--worst gap on 200 test items mixes order effects with item-level noise.
+\Tabref{tab:reliability} separates them.
+On \mnli, for all sizes, an order that does well on one half of the test items tends to do well on the other half (split-half $\rho=0.47$--$0.72$), and the observed range is 1.7--2.8$\times$ the null range.
+The same holds on \samsum for models of 3B and above, most strongly at 14B ($\rho=0.67$, ratio 2.67).
+On \sst for 3B and above, in contrast, the best and worst orders are indistinguishable from re-shuffled noise (ratio 0.89--1.00, $\rho\approx0$), and \rte at $\geq$3B is close to this regime (ratio 1.11--1.23).
+For these cells, about 1--2 points of range appear even though order has no systematic effect, so ``choosing the best order'' on a dev set would overfit.
+
+\input{tables/noise}
+
+\para{Numerical noise floor.}
+\Tabref{tab:noise} compares identical-prompt reruns with order changes.
+{\bf For classification, order effects are real.}
+Reruns flip 0--3\% of predictions while order changes flip 1--18\%, and numerical noise accounts for at most 6\% of order variance in 10 of 12 cells (maximum 23\%, \rte 1.5B).
+{\bf For generation, numerical noise is a large confound.}
+Between 35\% and 53\% of greedy summaries differ textually between identical runs, and for 0.5B, 1.5B and 7B, 30--42\% of the \rougel order variance at $K=4$ is reproduced by reruns alone.
+Only 3B (noise share 0.03) shows clearly above-noise order effects at $K=4$.
+This weakens the \samsum sensitivity numbers in \tabref{tab:h4} and \tabref{tab:size} for those sizes.
+We could not re-run 14B (\secref{sec:limitations}); its high split-half reliability ($\rho=0.67$) argues that its order effects are systematic, since numerical noise should not be consistent across halves of the test set.
+
+\subsection{H2: position influence in classification depends on task and size}
+\label{sec:h2}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\linewidth]{figures/fig4b_cls_labelflip_influence.png}
+\caption{Causal label-flip influence by demonstration position (1 = first) at $K=4$ (top; 0.5B--7B) and $K=8$ (bottom; all sizes, darker = larger). Error bars: 95\% bootstrap CI. Influence rises toward the end only for small models on \sst and for 7B on \rte. On \rte and \mnli, 1.5B and 3B influence turns \emph{negative} at the last position (anti-recency), while 7B and 14B are roughly flat.}
+\label{fig:labelflip}
+\end{figure}
+
+\input{tables/labelflip}
+
+{\bf Is the last demonstration 2--3$\times$ as influential as the first?}
+\Tabref{tab:labelflip} and \figref{fig:labelflip} show that this holds in only 2 of 15 model--task cells at $K=8$: \sst with 1.5B (2.42$\times$, CI [1.83, 3.50]) and \rte with 7B (1.81$\times$ [1.27, 2.44]; 2.22$\times$ [1.71, 2.97] at $K=4$).
+For 0.5B on \sst, influence rises steeply toward the end (0.73 nats at the last position), but the first position is slightly negative, so this is recency in shape without a meaningful ratio.
+Several cells point the other way: on \sst, 7B (0.49$\times$) and 14B (0.57$\times$) weight \emph{early} demonstrations more.
+
+\para{Anti-recency on NLI.}
+For 1.5B and 3B on \rte and \mnli, flipping the \emph{last} demonstration's label lowers the probability of the flipped-to label.
+For 3B on \mnli at $K=4$, the last position has influence $-0.79$ nats against $+0.61$ for the first, and at $K=8$ the flip moves predictions 4.2 percentage points \emph{away} from the flipped label.
+The effect is concentrated in the final position: influence is flat over earlier positions and then turns negative (\figref{fig:labelflip}).
+One possible mechanism is that when the demonstration closest to the test item looks inconsistent, the model contrasts away from it rather than copying it; we did not test this.
+Unmanipulated prompts agree: for 3B on \mnli at $K=8$, the prediction matches the label at position 1 for 36.4\% of items and at position 8 for 30.8\% (chance $\approx$33\%); for 14B, 36.8\% \vsx 31.8\%.
+Only 0.5B on \sst shows clear recency here (47.8\% \vsx 52.8\%).
+
+The 14B model is roughly position-uniform on \rte and \mnli (ratios 1.19 and 0.93, CIs include 1) and mildly primacy-weighted on \sst.
+{\bf H2 is not supported} as a general claim: the direction of the position effect depends on both model and task.
+We also fit an observational regression of the label score on the label at each position (\appref{app:details}); its absolute per-position values are poorly identified because they come mostly from label-composition differences between 10--20 demonstration sets, so we treat the causal probe as primary.
+
+\subsection{H3: generation shows recency, not primacy}
+\label{sec:h3}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.3\linewidth]{figures/fig5b_gen_marker_influence.png}
+\caption{Style-marker influence on \samsum by demonstration position at $K=4$ (top; 0.5B--7B) and $K=6$ (bottom; all sizes). Error bars: 95\% bootstrap CI. For 0.5B--3B, a marker in a later demonstration is copied more often (recency). For 7B and 14B influence is flat across positions. No model shows the strong primacy predicted by H3.}
+\label{fig:marker}
+\end{figure}
+
+\input{tables/marker}
+
+{\bf Does the first demonstration dominate generation?}
+\Tabref{tab:marker} and \figref{fig:marker} show that it does not.
+For 0.5B, 1.5B and 3B, the influence of a style marker rises monotonically with position: the first/last ratio is 0.64--0.74 at $K=6$ and 0.72--0.80 at $K=4$, with all CIs excluding 1.
+At 7B the profile is essentially flat, with a statistically detectable but tiny primacy (first/last 1.02 at $K=6$, 1.03 [1.02, 1.05] at $K=4$, \ie about 3\%).
+At 14B it is position-independent (0.98 [0.95, 1.01]).
+{\bf H3 is refuted.}
+The only primacy we observe (7B) is roughly ten times smaller than the recency seen in the small models (a 2--3\% excess against 20--36\%).
+A secondary, non-causal measure, the lexical copying of each demonstration's summary words into the output, is small (under 1.5\% of output words) and noisy, with no consistent primacy.
+Because the probe aggregates many paired comparisons on log-probabilities rather than on sampled text, it is less affected by the numerical noise of \secref{sec:reliability}.
+
+\subsection{H5: scale helps on easy classification, not everywhere}
+\label{sec:h5}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.8\linewidth]{figures/fig7_size_vs_sensitivity.png}
+\caption{Order sensitivity \vsx model size (log scale). \figleft Mean pairwise order gap ($K\geq2$). \figright Prediction flip rate between two orders. Sensitivity falls monotonically with size on \sst and \rte, reaches its minimum at 7B on \mnli, and rises with size on \samsum.}
+\label{fig:size}
+\end{figure}
+
+\input{tables/size}
+
+\Tabref{tab:size} and \figref{fig:size} show that larger models are less order-sensitive on \sst and \rte: \pgap falls monotonically from 2.10 to 0.39 points on \sst and from 2.96 to 0.92 on \rte (Spearman $\rho=-1$), and flip rates fall from 4.6\% to 0.6\% and from 9.1\% to 1.9\%.
+On \mnli the trend is non-monotone: sensitivity is lowest at 7B (\pgap 2.37) and higher again at 14B (3.60).
+On \samsum the trend points the other way: 14B is the most order-sensitive model (\pgap 2.29 \vsx 0.96 for 0.5B), and its order effects are the most reproducible (split-half $\rho=0.67$, \tabref{tab:reliability}).
+{\bf H5 is supported for \sst and \rte, but not universally.}
+With only five sizes from one family, the trend tests are coarse: $\rho=\pm0.7$ is not significant ($p=0.19$).

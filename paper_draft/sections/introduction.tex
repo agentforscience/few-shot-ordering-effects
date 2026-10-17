@@ -1,0 +1,42 @@
+\section{Introduction}
+\label{sec:intro}
+
+Give a language model the same four demonstrations in a different order, and it may give a different answer.
+Few-shot prompting~\cite{brown2020language} is how most practitioners adapt large language models (LLMs) to a new task, but the order of the demonstrations is almost never treated as a variable.
+It is fixed by whatever order the examples happened to be listed in.
+If order swings accuracy by many points, then reported few-shot numbers carry hidden variance, and practitioners need to know when order search, calibration or order-averaging is worth the effort.
+
+Prior work shows that order can matter a great deal.
+\citet{lu2022fantastically} found that some permutations of the same demonstrations give near state-of-the-art accuracy with GPT-2/GPT-3 while others are close to chance.
+\citet{zhao2021calibrate} documented a recency bias: GPT-3 tends to repeat the label of the last demonstration.
+\citet{liu2024lost} found U-shaped position effects in long contexts.
+From these results a common picture has formed: order sensitivity grows with the number of shots up to a point, classification favors the most recent demonstration, generation favors the first, NLI is much more fragile than sentiment, and larger models are more robust.
+
+{\bf Does this picture hold for modern instruction-tuned models, and is it measured correctly?}
+We see three gaps.
+First, most studies report the best--worst range over the sampled orders. The range grows with the number of draws, and the number of possible orders ($K!$) grows with the number of shots $K$, so trends in the range over $K$ mix model behavior with sampling.
+Second, position influence is usually inferred from observational correlations (\eg how often the prediction matches the last label), which are confounded with demonstration content.
+Third, few studies ask whether the ``best'' order is a real property of the prompt or a lucky draw on a small test set, and none we know of separate order effects from the numerical non-determinism of batched bf16 inference.
+
+We address these gaps with a single controlled protocol on the \qwen family (0.5B, 1.5B, 3B, 7B, 14B) across sentiment (\sst), two NLI tasks (\rte, \mnli) and dialogue summarization (\samsum).
+We test five specific hypotheses (H1--H5, \secref{sec:method}).
+We measure sensitivity with an expected pairwise gap (\pgap) that does not depend on the number of sampled orders.
+We estimate per-position influence \emph{causally}, by flipping the label of one demonstration or inserting a style marker into one demonstration's summary and measuring the change in the model's output distribution.
+We test whether order effects reproduce across halves of the test set, and we re-run identical prompts to measure the numerical noise floor.
+
+Most of the specific hypothesis does not survive.
+Order variance is at its plateau already at $K=2$; the ``rise until 4-shot'' shape appears only in the range, and tracks the number of available orders (2, 6, then 8).
+NLI is more order-sensitive than sentiment for every model, but the thresholds fail: the mean best--worst range at $K\geq4$ is 5.9--13.3 points on \mnli (not $>15$).
+``Last demonstration $\approx$2--3$\times$ the first'' holds in only 2 of 15 model--task cells; 1.5B and 3B models show \emph{anti-recency} on NLI, and summarization shows \emph{recency} (first/last influence ratio 0.64--0.80) rather than primacy.
+Larger models are less order-sensitive on \sst and \rte (\pgap falls from 2.10 to 0.39 points on \sst), but not on \mnli, and on \samsum the 14B model is the most order-sensitive.
+Finally, for models of 3B and above on \sst, the best and worst orders cannot be told apart from re-shuffled noise (observed/null range ratio 0.89--1.00).
+
+Our contributions are:
+\begin{itemize}[leftmargin=*,itemsep=0pt,topsep=0pt]
+    \item We conduct a controlled study of demonstration order across 6 shot counts, 4 tasks of 3 types and 5 model sizes from one family, with about 2.36M scored prompts and deterministic decoding.
+    \item We show that the commonly reported best--worst range produces a spurious ``rise then plateau'' trend over shot count, and propose using an expected pairwise gap that is comparable across $K$.
+    \item We measure per-position influence with causal label-flip and style-marker interventions, and find that the direction of position effects depends on both task and model size, with no universal recency/primacy split.
+    \item We complement sensitivity numbers with split-half reliability tests and an identical-prompt noise floor, which show when a ``best order'' is real and when choosing one would overfit.
+\end{itemize}
+
+\Secref{sec:related} reviews related work, \secref{sec:method} describes our protocol, \secref{sec:results} reports results for each hypothesis, and \secref{sec:discussion} discusses implications and limitations.

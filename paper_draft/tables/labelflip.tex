@@ -1,0 +1,29 @@
+\begin{table}[t]
+\centering
+\caption{H2: causal label-flip influence at $K=8$ (nats; increase in $\log P$ of the flipped-to label, averaged over test items, 10 demonstration sets $\times$ 2 orders). The last/first ratio has a 95\% bootstrap CI over demonstration sets. Ratios consistent with H2 (CI above 1 and overlapping 2--3) in \textbf{bold}. ``n/a'': first-position influence is negative or near zero, so the ratio is not meaningful.}
+\label{tab:labelflip}
+\small
+\begin{tabular}{@{}llcccc@{}}
+\toprule
+Task & Model & Pos.\ 1 & Pos.\ 2--7 (mean) & Pos.\ 8 & Last/first [95\% CI] \\
+\midrule
+\multirow{5}{*}{\sst} & 0.5B & $-$0.23 & 0.30 & 0.73 & n/a \\
+ & 1.5B & 0.27 & 0.80 & 0.64 & \textbf{2.42} [1.83, 3.50] \\
+ & 3B & 0.72 & 0.81 & 0.61 & 0.84 [0.52, 1.37] \\
+ & 7B & 0.79 & 1.10 & 0.39 & 0.49 [0.25, 0.87] \\
+ & 14B & 1.25 & 1.14 & 0.70 & 0.57 [0.29, 0.88] \\
+\midrule
+\multirow{5}{*}{\rte} & 0.5B & $-$0.10 & 0.01 & $-$0.10 & n/a \\
+ & 1.5B & 0.14 & 0.13 & $-$0.08 & $-$0.56 [$-$1.75, 0.23] \\
+ & 3B & 0.76 & 0.59 & 0.20 & 0.27 [0.02, 0.52] \\
+ & 7B & 0.99 & 1.61 & 1.79 & \textbf{1.81} [1.27, 2.44] \\
+ & 14B & 1.10 & 1.26 & 1.31 & 1.19 [0.88, 1.60] \\
+\midrule
+\multirow{5}{*}{\mnli} & 0.5B & $-$0.37 & 0.08 & 0.12 & n/a \\
+ & 1.5B & 0.27 & 0.21 & $-$0.25 & $-$0.92 [$-$1.46, $-$0.46] \\
+ & 3B & 0.65 & 0.62 & $-$0.28 & $-$0.43 [$-$0.90, $-$0.03] \\
+ & 7B & 1.95 & 1.85 & 1.90 & 0.97 [0.63, 1.52] \\
+ & 14B & 1.65 & 1.95 & 1.53 & 0.93 [0.58, 1.37] \\
+\bottomrule
+\end{tabular}
+\end{table}

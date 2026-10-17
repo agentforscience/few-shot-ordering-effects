@@ -1,0 +1,4 @@
+Fri Oct 16 03:57:02 PM CDT 2026 attempt 1 free=48541 launching Qwen/Qwen2.5-7B-Instruct
+Fri Oct 16 03:58:39 PM CDT 2026 failed: RuntimeError: Engine core initialization failed. See root cause above. Failed core proc(s): {}
+Fri Oct 16 04:45:17 PM CDT 2026 attempt 94 free=48541 launching Qwen/Qwen2.5-7B-Instruct
+Fri Oct 16 05:52:08 PM CDT 2026 OK

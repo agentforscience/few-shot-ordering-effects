@@ -1,0 +1,9 @@
+Few-shot prompting is the default way to adapt large language models, yet the order of the demonstrations is rarely controlled.
+We ask how demonstration order affects in-context learning as a function of shot count, task type and model size, and which positions drive the output.
+We run one controlled protocol on five \qwen models (0.5B--14B) across sentiment (\sst), natural language inference (\rte, \mnli) and dialogue summarization (\samsum), scoring about 2.36M prompts with deterministic decoding.
+We measure order sensitivity with a pairwise gap whose expectation does not depend on the number of sampled orders, estimate per-position influence with causal interventions, and check whether order effects survive split-half reliability tests and an identical-prompt numerical noise floor.
+Order variance is already at its plateau at two shots; the familiar ``rise until four shots'' shape of the best--worst range is an artifact of how many orders are available.
+NLI is consistently more order-sensitive than sentiment (mean best--worst range 5.9--13.3 points on \mnli \vsx 1.0--4.8 on \sst at $K\geq4$).
+Position effects are not a universal recency/primacy split: ``last demo $\approx$2--3$\times$ first'' holds in only 2 of 15 model--task cells, mid-size models show anti-recency on NLI, and summarization shows recency for small models rather than primacy.
+Scale reduces order sensitivity on \sst and \rte (Spearman $\rho=-1$), but not on \mnli or \samsum.
+For strong models on easy tasks, ``best orders'' cannot be told apart from item-level noise, so order search there overfits; on harder tasks, order effects are systematic and order-averaging is justified.

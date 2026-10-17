@@ -1,0 +1,117 @@
+\section{Method}
+\label{sec:method}
+
+\subsection{Problem formulation and hypotheses}
+
+A $K$-shot prompt consists of an instruction, a demonstration set $S=\{d_1,\dots,d_K\}$ drawn from a training pool, an order $\pi$ over $S$, and a test input $x$.
+For a test set $\test$ and a metric $m$ (accuracy or \rougel), let $m(S,\pi)$ be the score of the model on $\test$ when every test prompt uses demonstrations $S$ in order $\pi$.
+Because we decode deterministically, any difference between $m(S,\pi)$ and $m(S,\pi')$ is caused by order (up to numerical noise, which we measure in \secref{sec:noise}).
+
+We test five hypotheses:
+\begin{itemize}[leftmargin=*,itemsep=0pt,topsep=0pt]
+    \item[\bf H1] Order variance increases with $K$ up to $K=4$, then plateaus.
+    \item[\bf H2] For classification, the last demonstration is 2--3$\times$ as influential as the first (recency).
+    \item[\bf H3] For generation, the first demonstration is more influential than the last (primacy).
+    \item[\bf H4] The best--worst order gap exceeds 15 accuracy points on NLI and stays below 5 on sentiment.
+    \item[\bf H5] Larger models are less order-sensitive.
+\end{itemize}
+
+\subsection{Measuring order sensitivity}
+
+For each demonstration set $S$ we evaluate a set $\Pi_S$ of distinct orders and compute three statistics, which we then average over demonstration sets: the standard deviation of $m(S,\pi)$ over $\pi\in\Pi_S$; the range $\max_\pi m(S,\pi)-\min_\pi m(S,\pi)$; and the expected pairwise gap
+\begin{equation}
+\pgap(S) = \frac{1}{|\Pi_S|(|\Pi_S|-1)} \sum_{\pi\neq\pi'\in\Pi_S} \big|m(S,\pi)-m(S,\pi')\big|.
+\label{eq:pgap}
+\end{equation}
+\pgap estimates $\E|m(S,\pi)-m(S,\pi')|$ for two random orders. Its expectation does not depend on $|\Pi_S|$, so it can be compared across $K$ even though $K=2$ has only two orders and $K=3$ has six.
+The range, in contrast, is the maximum minus the minimum of $|\Pi_S|$ draws, and grows with $|\Pi_S|$ even when the underlying distribution is fixed.
+For classification we also report the \emph{flip rate}: the fraction of test items whose prediction changes between two orders.
+
+\para{Is the best order real?}
+On a test set of 200 items, two orders can differ by a few points by chance.
+We therefore compute a \emph{split-half reliability}: we split $\test$ into two random halves, score every order on each half, and compute the Spearman correlation of the per-order scores across halves (averaged over 20 splits).
+We compare the observed range to a \emph{null range} obtained by shuffling order labels independently within each test item. The null keeps item-level variability and removes any order-level structure.
+A ratio near 1 means the best and worst orders are indistinguishable from noise.
+
+\para{Numerical noise floor.}
+\label{sec:noise}
+Batched bf16 inference in vLLM is not bit-deterministic across batch compositions.
+We re-run the exact same prompts ($K=4$, demonstration sets 0--2, all 8 orders) and define the \emph{noise share} as $\E[(\text{rerun difference})^2] / \E[(\text{order difference})^2]$, the fraction of order-induced squared score differences that identical reruns also produce.
+
+\subsection{Measuring position influence causally}
+
+Observational estimates (\eg regressing the prediction on the label at each position) are confounded with demonstration content when only 10--20 demonstration sets are available.
+We therefore intervene on one position at a time, keeping everything else fixed (\algref{alg:probe}).
+
+\para{Label-flip probe (classification).}
+At $K\in\{4,8\}$ we flip the label of the demonstration at position $i$ to a different label $y'$ (chosen with a fixed seed) and define the influence of position $i$ as the mean increase in $\log P(y'\mid\text{prompt})$ over test items.
+A recency effect predicts that influence grows with $i$; H2 predicts a last/first ratio of 2--3.
+
+\para{Style-marker probe (generation).}
+At $K\in\{4,6\}$ we rewrite the summary of demonstration $i$ to begin with ``In short, '' and define influence as the increase in $\log P(\text{output begins with ``In short,''})$ relative to a control prompt with no marker.
+H3 predicts that influence is largest at position 1.
+
+Both probes use demonstration sets 0--9 and the first two orders of each. We report 95\% confidence intervals from 2,000 bootstrap resamples of demonstration sets.
+
+\begin{algorithm}[t]
+\caption{Causal position-influence probe}
+\label{alg:probe}
+\begin{algorithmic}[1]
+\State \textbf{Input:} demonstration sets $\{S_j\}$, orders $\{\pi_{j,1},\pi_{j,2}\}$, test set $\test$, intervention $\phi$
+\For{each set $S_j$ and order $\pi\in\{\pi_{j,1},\pi_{j,2}\}$}
+    \State $p_0(x) \gets \log P(\text{target}\mid S_j,\pi,x)$ for all $x\in\test$ \rightcomment{unmodified prompt}
+    \For{position $i=1,\dots,K$}
+        \State $S_j^{(i)} \gets \phi(S_j,\pi,i)$ \rightcomment{flip label / add marker at position $i$ only}
+        \State $\Delta_{j,\pi,i} \gets \frac{1}{|\test|}\sum_{x} \big[\log P(\text{target}\mid S_j^{(i)},\pi,x) - p_0(x)\big]$
+    \EndFor
+\EndFor
+\State \Return influence$_i$ = mean of $\Delta_{j,\pi,i}$ over $(j,\pi)$, with bootstrap CI over $j$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Experimental setup}
+
+\para{Models and decoding.}
+We use \qwen at 0.5B, 1.5B, 3B, 7B and 14B parameters~\cite{qwen2025qwen25} in bf16, served locally with vLLM~\cite{kwon2023efficient} on one shared NVIDIA RTX A6000.
+Using one family keeps model size as the only systematic difference.
+For classification, the next token is restricted to the label tokens, giving a log-softmax over the label set; the prediction is the argmax.
+For generation we use greedy decoding with at most 80 new tokens, stopping at a newline.
+
+\para{Prompts.}
+We use plain-text completion prompts without a chat template, with one template per task:
+\sst uses \texttt{Review: ... / Sentiment: positive|negative};
+\rte uses \texttt{Premise / Hypothesis / Answer: yes|no};
+\mnli uses \texttt{yes|maybe|no}, with an instruction defining them as entailment, neutral and contradiction;
+\samsum uses \texttt{Dialogue: ... / Summary: ...} under the instruction ``Summarize each dialogue in one or two sentences.''
+
+\para{Data.}
+\Tabref{tab:data} lists the tasks. We use \sst~\cite{socher2013recursive}, \rte and \mnli from GLUE~\cite{wang2018glue,williams2018broad}, and \samsum~\cite{gliwa2019samsum}.
+
+\begin{table}[t]
+\centering
+\caption{Tasks, demonstration pools (length-filtered training sets) and test sets.}
+\label{tab:data}
+\small
+\begin{tabular}{@{}llrr@{}}
+\toprule
+Task & Type & Demo pool & Test items \\
+\midrule
+\sst & sentiment, 2-way & 41,584 & 200 (val, balanced) \\
+\rte & NLI, 2-way & 1,830 & 200 (val) \\
+\mnli (matched) & NLI, 3-way & 327,814 & 201 (val, balanced) \\
+\samsum & dialogue summarization & 7,640 & 80 (test) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\para{Design.}
+For classification, $K\in\{1,2,3,4,6,8\}$. For each $K$ we draw 10 random demonstration sets (labels not forced to balance, so label positions vary) and evaluate each under $\min(K!,8)$ distinct orders: all orders for $K\leq3$ and 8 random orders for $K\geq4$.
+For the 0.5B, 1.5B and 3B models we add 10 extension sets per $K$ (seed 1042); we skip these for 7B and 14B to save GPU time on the shared host.
+For \samsum, $K\in\{1,2,3,4,6\}$, 6 sets, $\min(K!,6)$ orders and 80 test dialogues.
+The 14B probes are run only at $K=8$ (classification) and $K=6$ (\samsum).
+Zero-shot ($K=0$) and the majority class serve as baselines.
+In total we score about 2.36M prompts and generations.
+
+\para{Metrics and statistics.}
+We report accuracy for classification and stemmed \rougel F1~\cite{lin2004rouge} for \samsum.
+We test trends over $K$ and over model size with Spearman correlations and report 95\% bootstrap confidence intervals over demonstration sets.

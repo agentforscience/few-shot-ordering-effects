@@ -1,0 +1,17 @@
+model,task,rerun_flip,order_flip,rerun_absgap,order_pairgap,noise_share
+Qwen2.5-0.5B-Instruct,mnli,2.854,17.744,0.979,3.893,0.058
+Qwen2.5-0.5B-Instruct,rte,2.417,7.03,0.958,2.208,0.167
+Qwen2.5-0.5B-Instruct,sst2,0.333,10.827,0.208,6.494,0.001
+Qwen2.5-0.5B-Instruct,samsum,53.333,,0.469,0.843,0.297
+Qwen2.5-1.5B-Instruct,mnli,1.292,9.113,0.521,4.518,0.018
+Qwen2.5-1.5B-Instruct,rte,0.854,3.756,0.562,1.375,0.234
+Qwen2.5-1.5B-Instruct,sst2,0.104,2.226,0.104,1.095,0.028
+Qwen2.5-1.5B-Instruct,samsum,34.583,,0.525,0.796,0.423
+Qwen2.5-3B-Instruct,mnli,0.833,10.381,0.542,3.149,0.039
+Qwen2.5-3B-Instruct,rte,0.25,2.256,0.167,0.72,0.073
+Qwen2.5-3B-Instruct,sst2,0.083,3.387,0.083,0.685,0.06
+Qwen2.5-3B-Instruct,samsum,37.708,,0.398,2.306,0.027
+Qwen2.5-7B-Instruct,mnli,0.458,5.786,0.25,1.845,0.029
+Qwen2.5-7B-Instruct,rte,0.333,2.923,0.25,1.196,0.061
+Qwen2.5-7B-Instruct,sst2,0.0,1.036,0.0,0.417,0.0
+Qwen2.5-7B-Instruct,samsum,34.722,,0.511,0.898,0.346
